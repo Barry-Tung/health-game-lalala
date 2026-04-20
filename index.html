@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>健康知識小測驗 App</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      background: linear-gradient(135deg, #eef7ff 0%, #f7fffb 100%);
+      color: #1f2937;
+    }
+    .container {
+      max-width: 860px;
+      margin: 40px auto;
+      padding: 24px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+      padding: 28px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 2rem;
+      color: #0f766e;
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 1.35rem;
+      color: #0f172a;
+    }
+    p {
+      line-height: 1.7;
+      margin: 8px 0;
+    }
+    .subtitle {
+      color: #475569;
+      margin-bottom: 18px;
+    }
+    .badge {
+      display: inline-block;
+      background: #ccfbf1;
+      color: #115e59;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      margin-bottom: 14px;
+    }
+    .question {
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 16px;
+      transition: 0.2s ease;
+    }
+    .question:hover {
+      border-color: #99f6e4;
+      box-shadow: 0 4px 12px rgba(15,118,110,0.08);
+    }
+    .question-title {
+      font-weight: 700;
+      margin-bottom: 12px;
+      font-size: 1.05rem;
+    }
+    .options {
+      display: grid;
+      gap: 10px;
+    }
+    label.option {
+      display: block;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      cursor: pointer;
+    }
+    label.option:hover {
+      background: #f0fdfa;
+      border-color: #5eead4;
+    }
+    input[type="radio"] {
+      margin-right: 8px;
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+    .primary {
+      background: #0f766e;
+      color: white;
+    }
+    .primary:hover {
+      background: #115e59;
+    }
+    .secondary {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .secondary:hover {
+      background: #cbd5e1;
+    }
+    .result-box {
+      display: none;
+      margin-top: 24px;
+      padding: 22px;
+      border-radius: 18px;
+      background: #f0fdfa;
+      border: 1px solid #99f6e4;
+    }
+    .score {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #0f766e;
+      margin: 8px 0 12px;
+    }
+    .feedback {
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 16px;
+      border: 1px solid #d1fae5;
+      margin-top: 14px;
+    }
+    .review-item {
+      margin-top: 12px;
+      padding: 14px;
+      border-radius: 12px;
+      background: #fff;
+      border-left: 6px solid #cbd5e1;
+    }
+    .correct {
+      border-left-color: #10b981;
+    }
+    .incorrect {
+      border-left-color: #ef4444;
+    }
+    .footer-note {
+      font-size: 0.92rem;
+      color: #64748b;
+      margin-top: 18px;
+    }
+    @media (max-width: 640px) {
+      .container { padding: 16px; margin: 20px auto; }
+      .card { padding: 20px; }
+      h1 { font-size: 1.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="badge">預防保健 × 健康知識互動 App</div>
+      <h1>健康知識小測驗</h1>
+      <p class="subtitle">透過簡單的互動題目，快速檢視自己對健康生活習慣的基本認識。完成後可立即看到分數、解析與建議。</p>
+      <p>適用情境：課堂展示、同學試用、基礎健康衛教推廣。</p>
+    </div>
+
+    <div class="card">
+      <h2>請選出你認為正確的答案</h2>
+      <form id="quizForm"></form>
+      <div class="actions">
+        <button class="primary" type="button" onclick="submitQuiz()">提交答案</button>
+        <button class="secondary" type="button" onclick="resetQuiz()">重新作答</button>
+      </div>
+
+      <div id="resultBox" class="result-box">
+        <h2>作答結果</h2>
+        <div id="score" class="score"></div>
+        <p id="summaryText"></p>
+        <div id="feedback" class="feedback"></div>
+        <div id="review"></div>
+        <p class="footer-note">提醒：本測驗僅供健康教育與自我學習參考，不能取代專業醫療建議。</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const questions = [
+      {
+        question: "1. 一般成人每週建議至少累積多少中等強度身體活動？",
+        options: ["30 分鐘", "75 分鐘", "150 分鐘", "300 分鐘"],
+        answer: "150 分鐘",
+        explanation: "一般建議成人每週至少進行 150 分鐘中等強度身體活動，有助於心血管健康與體重控制。"
+      },
+      {
+        question: "2. 下列哪一項最接近成人每日建議睡眠時間？",
+        options: ["3–4 小時", "5 小時", "7–9 小時", "11–12 小時"],
+        answer: "7–9 小時",
+        explanation: "多數成人建議每日睡眠 7–9 小時，過少或過多都可能影響健康。"
+      },
+      {
+        question: "3. 下列哪一項最有助於預防高血壓？",
+        options: ["高鹽飲食", "規律運動與減少鈉攝取", "長期熬夜", "常喝含糖飲料"],
+        answer: "規律運動與減少鈉攝取",
+        explanation: "規律運動、減少鈉攝取、維持體重與均衡飲食，都是預防高血壓的重要方法。"
+      },
+      {
+        question: "4. 洗手在預防傳染病上最主要的作用是什麼？",
+        options: ["讓手變香", "降低病原體傳播", "增加免疫力", "取代疫苗"],
+        answer: "降低病原體傳播",
+        explanation: "正確洗手可有效移除手上的病原體，降低感染與傳播風險。"
+      },
+      {
+        question: "5. 下列哪一項屬於較健康的飲食習慣？",
+        options: ["每天喝含糖飲料", "多選擇蔬果與全穀類", "常吃高油炸物", "三餐都吃宵夜"],
+        answer: "多選擇蔬果與全穀類",
+        explanation: "增加蔬果與全穀類攝取，有助於獲得纖維、維生素與礦物質，對長期健康較有利。"
+      }
+    ];
+
+    const quizForm = document.getElementById('quizForm');
+
+    function renderQuestions() {
+      quizForm.innerHTML = '';
+      questions.forEach((q, index) => {
+        const block = document.createElement('div');
+        block.className = 'question';
+
+        const title = document.createElement('div');
+        title.className = 'question-title';
+        title.textContent = q.question;
+        block.appendChild(title);
+
+        const optionsDiv = document.createElement('div');
+        optionsDiv.className = 'options';
+
+        q.options.forEach(option => {
+          const label = document.createElement('label');
+          label.className = 'option';
+          label.innerHTML = `
+            <input type="radio" name="question${index}" value="${option}">
+            ${option}
+          `;
+          optionsDiv.appendChild(label);
+        });
+
+        block.appendChild(optionsDiv);
+        quizForm.appendChild(block);
+      });
+    }
+
+    function submitQuiz() {
+      let score = 0;
+      let answered = 0;
+      const review = document.getElementById('review');
+      const feedback = document.getElementById('feedback');
+      const resultBox = document.getElementById('resultBox');
+      const scoreText = document.getElementById('score');
+      const summaryText = document.getElementById('summaryText');
+      review.innerHTML = '';
+
+      questions.forEach((q, index) => {
+        const selected = document.querySelector(`input[name="question${index}"]:checked`);
+        if (selected) answered++;
+        const userAnswer = selected ? selected.value : '未作答';
+        const isCorrect = userAnswer === q.answer;
+        if (isCorrect) score++;
+
+        const item = document.createElement('div');
+        item.className = `review-item ${isCorrect ? 'correct' : 'incorrect'}`;
+        item.innerHTML = `
+          <strong>${q.question}</strong><br>
+          你的答案：${userAnswer}<br>
+          正確答案：${q.answer}<br>
+          解析：${q.explanation}
+        `;
+        review.appendChild(item);
+      });
+
+      if (answered < questions.length) {
+        alert('你還有題目尚未作答，系統仍會顯示目前結果。');
+      }
+
+      const percentage = Math.round((score / questions.length) * 100);
+      scoreText.textContent = `${score} / ${questions.length} 題（${percentage} 分）`;
+
+      if (percentage >= 80) {
+        summaryText.textContent = '你對基本健康知識已有不錯的掌握，具備良好的預防保健觀念。';
+        feedback.innerHTML = '<strong>建議：</strong>可以進一步加強健康行為的實踐，例如規律運動、均衡飲食與睡眠管理。';
+      } else if (percentage >= 60) {
+        summaryText.textContent = '你具備部分健康知識基礎，但仍有一些觀念可以再加強。';
+        feedback.innerHTML = '<strong>建議：</strong>可多留意日常生活中的健康習慣，並加強預防醫學與衛教知識。';
+      } else {
+        summaryText.textContent = '你目前對健康知識的掌握度較低，建議從基本健康生活習慣開始建立。';
+        feedback.innerHTML = '<strong>建議：</strong>可從運動、睡眠、飲食與個人衛生四個面向開始逐步改善。';
+      }
+
+      resultBox.style.display = 'block';
+      resultBox.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function resetQuiz() {
+      document.getElementById('quizForm').reset();
+      document.getElementById('resultBox').style.display = 'none';
+      document.getElementById('review').innerHTML = '';
+    }
+
+    renderQuestions();
+  </script>
+</body>
+</html>
