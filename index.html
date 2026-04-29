@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>森林平台跳躍健康問答</title>
+  <title>跳跳跳健康問答</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -49,6 +49,7 @@
     .start { background: #77d84a; color: #18300d; }
     .restart { background: #fff; color: #1c2e12; }
     .stage {
+      position: relative;
       width: min(1280px, 100%);
       background: #24341d;
       border-radius: 22px;
@@ -56,6 +57,22 @@
       box-shadow: 0 20px 60px rgba(0,0,0,0.35);
       border: 3px solid rgba(255,255,255,0.08);
     }
+    .win-restart {
+      position: absolute;
+      left: 50%;
+      top: 73%;
+      transform: translate(-50%, -50%);
+      display: none;
+      z-index: 10;
+      background: linear-gradient(180deg, #ffe66d, #ffb703);
+      color: #3a2600;
+      border: 4px solid rgba(255,255,255,0.95);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.32);
+      padding: 14px 34px;
+      font-size: 1.15rem;
+      border-radius: 999px;
+    }
+    .win-restart.show { display: block; }
     canvas {
       display: block;
       width: 100%;
@@ -76,7 +93,7 @@
       <div class="hud">
         <div class="pill" id="scoreText">分數：0</div>
         <div class="pill" id="lifeText">生命：3</div>
-        <div class="pill" id="levelText">題目：1 / 4</div>
+        <div class="pill" id="levelText">題目：1 / 10</div>
       </div>
       <div class="btns">
         <button class="start" id="startBtn">開始遊戲</button>
@@ -86,10 +103,11 @@
 
     <div class="stage">
       <canvas id="gameCanvas" width="1280" height="820"></canvas>
+      <button class="win-restart" id="winRestartBtn">重新開始</button>
     </div>
 
     <div class="note">
-      操作：A / D 或 ← / → 移動，W / ↑ / 空白鍵跳躍。從地面跳起來頂正確答案箱，答案箱會消失並開出通道；答錯或頂到磚塊不會有反應。
+      操作：A / D 或 ← / → 移動，W / ↑ / 空白鍵跳躍。從地面跳起來碰撞正確答案，答案箱會消失並開出通道；答錯或頂到磚塊不會有反應。
     </div>
   </div>
 
@@ -101,6 +119,7 @@
     const levelText = document.getElementById('levelText');
     const startBtn = document.getElementById('startBtn');
     const restartBtn = document.getElementById('restartBtn');
+    const winRestartBtn = document.getElementById('winRestartBtn');
 
     const W = canvas.width;
     const H = canvas.height;
@@ -147,13 +166,49 @@
         question: '第 3 題：哪一項較有助於預防高血壓？',
         correct: 0,
         options: ['減少鈉攝取', '高鹽飲食', '長期熬夜', '含糖飲料'],
-        explain: '減少鈉攝取、規律運動與體重控制有助於預防高血壓。'
+        explain: '減少鈉攝取有助於血壓控制。'
       },
       {
         question: '第 4 題：下列哪一項較符合健康飲食？',
         correct: 3,
         options: ['常吃炸物', '每天宵夜', '含糖飲料', '蔬果全穀'],
-        explain: '蔬果與全穀類能提供纖維與多種營養素。'
+        explain: '蔬果與全穀類富含營養。'
+      },
+      {
+        question: '第 5 題：每日建議飲水量最接近哪一項？',
+        correct: 1,
+        options: ['500 ml', '1500–2000 ml', '300 ml', '4000 ml'],
+        explain: '一般成人每日建議約 1500–2000 ml。'
+      },
+      {
+        question: '第 6 題：哪種行為有助於心理健康？',
+        correct: 2,
+        options: ['長時間滑手機', '熬夜追劇', '規律運動', '過度工作'],
+        explain: '規律運動有助於減壓與情緒調節。'
+      },
+      {
+        question: '第 7 題：預防流感最有效的方法之一是？',
+        correct: 0,
+        options: ['接種疫苗', '喝可樂', '熬夜', '少洗手'],
+        explain: '接種疫苗能有效預防流感。'
+      },
+      {
+        question: '第 8 題：哪一項屬於良好的飲食習慣？',
+        correct: 1,
+        options: ['暴飲暴食', '定時定量', '只吃零食', '跳過早餐'],
+        explain: '定時定量有助於維持健康。'
+      },
+      {
+        question: '第 9 題：久坐族建議多久起身活動一次？',
+        correct: 2,
+        options: ['3 小時', '不用活動', '30–60 分鐘', '一天一次'],
+        explain: '每 30–60 分鐘起身活動較健康。'
+      },
+      {
+        question: '第 10 題：哪一項有助於維持心血管健康？',
+        correct: 3,
+        options: ['高油飲食', '抽菸', '缺乏運動', '規律運動'],
+        explain: '規律運動有助於心血管健康。'
       }
     ];
 
@@ -166,6 +221,47 @@
     let transitionTimer = 0;
     let popup = '';
     let popupTimer = 0;
+    let coinVisible = false;
+    let coinCollected = false;
+    let attempts = 0;
+    let correctAnswers = 0;
+    let wrongAnswers = 0;
+    let bestScore = Number(localStorage.getItem('healthGameBestScore') || 0);
+    const wrongBoxShake = {}; // 記錄錯誤答案箱晃動時間，key = 答案索引
+    const particles = []; // 金幣與答對特效粒子
+
+    const coinImage = new Image();
+    coinImage.src = './coin.png'; // 可選：若同資料夾放 coin.png，會使用圖片；否則使用程式畫的金幣
+    let coinImageLoaded = false;
+    coinImage.onload = () => { coinImageLoaded = true; };
+
+    let audioCtx = null;
+    function playTone(freq = 440, duration = 0.08, type = 'sine', volume = 0.08) {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function playJumpSound() { playTone(260, 0.07, 'square', 0.045); }
+    function playWrongSound() { playTone(140, 0.12, 'sawtooth', 0.06); }
+    function playCorrectSound() {
+      playTone(520, 0.08, 'sine', 0.06);
+      setTimeout(() => playTone(760, 0.08, 'sine', 0.055), 70);
+    }
+    function playCoinSound() {
+      playTone(880, 0.07, 'triangle', 0.06);
+      setTimeout(() => playTone(1180, 0.08, 'triangle', 0.055), 60);
+    }
 
     function answerBoxes() {
       const startX = 165;
@@ -182,6 +278,7 @@
     }
 
     function startGame() {
+      winRestartBtn.classList.remove('show');
       running = true;
       finished = false;
       currentLevel = 0;
@@ -189,6 +286,13 @@
       lives = 3;
       gateOpened = false;
       transitionTimer = 0;
+      coinVisible = false;
+      coinCollected = false;
+      attempts = 0;
+      correctAnswers = 0;
+      wrongAnswers = 0;
+      particles.length = 0;
+      Object.keys(wrongBoxShake).forEach(key => delete wrongBoxShake[key]);
       setPlayerToGround();
       setPopup('頂到正確答案箱，箱子會消失並開通往上一層的路。', 180);
       updateHud();
@@ -218,6 +322,7 @@
       if (player.onGround) {
         player.vy = -player.jump;
         player.onGround = false;
+        playJumpSound();
       }
     }
 
@@ -227,26 +332,102 @@
 
     function openGate(box) {
       gateOpened = true;
+      coinVisible = true;
+      coinCollected = false;
+      attempts += 1;
+      correctAnswers += 1;
       score += 10;
       updateHud();
-      setPopup(`答對了！${levels[currentLevel].explain}`, 150);
+      setPopup(`答對了！${levels[currentLevel].explain} 請撿取金幣進入下一題。`, 180);
+      playCorrectSound();
+      spawnParticles(box.x + box.w / 2, box.y + box.h / 2, '#89ff4d', 18);
       // 答對後答案箱消失，角色會被往上帶一段，方便穿過通道跳到上層平台。
       player.y = box.y + box.h + 2;
       player.vy = -17.2;
+    }
+
+    function coinRect() {
+      return {
+        x: 610,
+        y: upperPlatformY - 62,
+        w: 46,
+        h: 46
+      };
+    }
+
+    function collectCoin() {
+      if (!coinVisible || coinCollected) return;
+      coinCollected = true;
+      coinVisible = false;
+      score += 5;
+      updateHud();
+      setPopup('獲得金幣！準備進入下一題。', 80);
+      playCoinSound();
+      const c = coinRect();
+      spawnParticles(c.x + c.w / 2, c.y + c.h / 2, '#ffd83d', 26);
+      transitionTimer = 45;
+    }
+
+    function triggerWrongBoxFeedback(box) {
+      wrongBoxShake[box.idx] = 24;
+      attempts += 1;
+      wrongAnswers += 1;
+      playWrongSound();
+      setPopup('這不是正確答案，請再試一次。', 55);
+    }
+
+    function updateWrongBoxShake() {
+      for (const key of Object.keys(wrongBoxShake)) {
+        wrongBoxShake[key] -= 1;
+        if (wrongBoxShake[key] <= 0) delete wrongBoxShake[key];
+      }
+    }
+
+    function spawnParticles(x, y, color = '#ffd83d', count = 18) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1.5 + Math.random() * 4.2;
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 1.8,
+          life: 38 + Math.random() * 22,
+          size: 3 + Math.random() * 5,
+          color
+        });
+      }
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.16;
+        p.life -= 1;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
     }
 
     function nextLevel() {
       currentLevel += 1;
       if (currentLevel >= levels.length) {
         finished = true;
-        setPopup('恭喜通關！你完成全部健康知識題目。', 99999);
+        bestScore = Math.max(bestScore, score);
+        localStorage.setItem('healthGameBestScore', String(bestScore));
+        setPopup('恭喜！你已收集到所有金幣，挑戰成功！', 99999);
+        winRestartBtn.classList.add('show');
         updateHud();
         return;
       }
       gateOpened = false;
       transitionTimer = 0;
+      coinVisible = false;
+      coinCollected = false;
+      Object.keys(wrongBoxShake).forEach(key => delete wrongBoxShake[key]);
       setPlayerToGround();
-      setPopup('進入下一題。請再頂出正確答案箱。', 150);
+      setPopup('進入下一題。請碰撞出正確答案。', 150);
       updateHud();
     }
 
@@ -302,6 +483,7 @@
           if (solid.type === 'correctBox' && !gateOpened) {
             openGate(solid);
           } else {
+            if (solid.type === 'wrongBox') triggerWrongBoxFeedback(solid);
             player.vy = 2.8;
           }
           return;
@@ -341,6 +523,8 @@
 
       if (transitionTimer > 0) {
         transitionTimer--;
+        updateWrongBoxShake();
+        updateParticles();
         if (transitionTimer === 0) nextLevel();
         return;
       }
@@ -380,39 +564,43 @@
       // 答案箱與磚牆碰撞：正確箱消失；錯誤箱與牆會阻擋角色。
       resolveBarrierCollision(prev);
 
-      // 上層平台：只有答對開門後才允許站上去，站上去後進下一題。
+      // 上層平台：只有答對開門後才允許站上去。站上去後不直接換題，必須吃到金幣才進入下一題。
       if (gateOpened && prevBottom <= upperPlatformY && player.y + player.h >= upperPlatformY) {
         player.y = upperPlatformY - player.h;
         player.vy = 0;
         player.onGround = true;
-        transitionTimer = 45;
-        setPopup('成功跳到上一層！準備進入下一題。', 80);
+      }
+
+      // 金幣獎賞：答對後出現在上層平台，角色碰到金幣後才進入下一題。
+      if (coinVisible && rectsIntersect(player, coinRect())) {
+        collectCoin();
       }
 
       if (popupTimer > 0) popupTimer--;
+      updateWrongBoxShake();
+      updateParticles();
     }
 
-    function drawBackground() {
-      const gradient = ctx.createLinearGradient(0, 0, 0, H);
-      gradient.addColorStop(0, '#73cdd7');
-      gradient.addColorStop(0.35, '#d9c29a');
-      gradient.addColorStop(0.65, '#79aa4e');
-      gradient.addColorStop(1, '#334c25');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, W, H);
+    const bgImage = new Image();
+bgImage.src = "./background.png"; // 請把你的圖片命名為 background.png 並放同資料夾
+let bgLoaded = false;
 
-      drawSun(600, 165);
-      drawCloud(140, 120, 1.2);
-      drawCloud(880, 92, 0.9);
-      drawHill(-60, 330, 420, 160, '#6fa756', 0.7);
-      drawHill(230, 310, 430, 170, '#8ec56e', 0.55);
-      drawHill(820, 320, 520, 180, '#6ea35c', 0.6);
-      drawTree(55, 420, 1.4);
-      drawTree(290, 410, 1.1);
-      drawTree(960, 420, 1.25);
-      drawTree(1130, 420, 1.05);
-      drawGrass(groundY);
-    }
+bgImage.onload = () => {
+  bgLoaded = true;
+};
+
+function drawBackground() {
+  if (bgLoaded) {
+    ctx.drawImage(bgImage, 0, 0, W, H);
+  } else {
+    // fallback（避免 drawImage error）
+    const gradient = ctx.createLinearGradient(0, 0, 0, H);
+    gradient.addColorStop(0, '#73cdd7');
+    gradient.addColorStop(1, '#334c25');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
 
     function drawSun(x, y) {
       const g = ctx.createRadialGradient(x, y, 10, x, y, 150);
@@ -555,20 +743,81 @@
 
     function drawAnswerBox(box) {
       if (box.removed) return;
+      const shakeFrames = wrongBoxShake[box.idx] || 0;
+      const shakeOffset = shakeFrames > 0 ? Math.sin(shakeFrames * 1.15) * 8 : 0;
+      const yBump = shakeFrames > 0 ? Math.sin(shakeFrames * 0.8) * 2 : 0;
+      const drawX = box.x + shakeOffset;
+      const drawY = box.y + yBump;
       ctx.save();
+      if (shakeFrames > 0) {
+        ctx.shadowColor = 'rgba(255, 40, 40, 0.65)';
+        ctx.shadowBlur = 14;
+      }
       ctx.fillStyle = '#5bc92f';
-      ctx.fillRect(box.x, box.y, box.w, box.h);
-      ctx.fillStyle = '#83ee4b';
-      ctx.fillRect(box.x + 5, box.y + 5, box.w - 10, box.h - 10);
-      ctx.strokeStyle = '#2e7019';
+      ctx.fillRect(drawX, drawY, box.w, box.h);
+      ctx.fillStyle = shakeFrames > 0 ? '#7df047' : '#83ee4b';
+      ctx.fillRect(drawX + 5, drawY + 5, box.w - 10, box.h - 10);
+      ctx.strokeStyle = shakeFrames > 0 ? '#d62828' : '#2e7019';
       ctx.lineWidth = 4;
-      ctx.strokeRect(box.x, box.y, box.w, box.h);
+      ctx.strokeRect(drawX, drawY, box.w, box.h);
       ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillRect(box.x + 10, box.y + 10, box.w - 20, 12);
+      ctx.fillRect(drawX + 10, drawY + 10, box.w - 20, 12);
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
       ctx.font = 'bold 19px "Microsoft JhengHei"';
-      wrapCenter(box.text, box.x + box.w / 2, box.y + 36, box.w - 10, 21);
+      wrapCenter(box.text, drawX + box.w / 2, drawY + 36, box.w - 10, 21);
+      ctx.restore();
+    }
+
+    function drawCoin() {
+      if (!coinVisible) return;
+      const c = coinRect();
+      const pulse = Math.sin(Date.now() / 120) * 3;
+      const size = c.w + pulse;
+      const x = c.x + c.w / 2 - size / 2;
+      const y = c.y + c.h / 2 - size / 2;
+
+      if (coinImageLoaded) {
+        ctx.drawImage(coinImage, x, y, size, size);
+        return;
+      }
+
+      ctx.save();
+      const cx = c.x + c.w / 2;
+      const cy = c.y + c.h / 2;
+      ctx.fillStyle = '#ffd83d';
+      ctx.beginPath();
+      ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#b56b00';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.fillStyle = '#fff4a3';
+      ctx.beginPath();
+      ctx.arc(cx - 9, cy - 10, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#e19a00';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, size / 2 - 10, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#d98400';
+      ctx.font = 'bold 22px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('$', cx, cy + 8);
+      ctx.restore();
+    }
+
+    function drawParticles() {
+      ctx.save();
+      for (const p of particles) {
+        ctx.globalAlpha = Math.max(p.life / 55, 0);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
       ctx.restore();
     }
 
@@ -625,22 +874,109 @@
       ctx.restore();
     }
 
+    function drawFinalCoins(centerX, y) {
+      ctx.save();
+      for (let i = 0; i < 10; i++) {
+        const x = centerX - 225 + i * 50;
+        const bounce = Math.sin(Date.now() / 180 + i * 0.6) * 4;
+        ctx.fillStyle = '#ffd83d';
+        ctx.beginPath();
+        ctx.arc(x, y + bounce, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#b56b00';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.fillStyle = '#fff4a3';
+        ctx.beginPath();
+        ctx.arc(x - 6, y - 7 + bounce, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawBigPrizeCoin(x, y) {
+      const pulse = Math.sin(Date.now() / 180) * 5;
+      const r = 54 + pulse;
+      ctx.save();
+      ctx.fillStyle = '#ffd83d';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#a65f00';
+      ctx.lineWidth = 8;
+      ctx.stroke();
+      ctx.strokeStyle = '#e9a800';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(x, y, r - 18, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#fff4a3';
+      ctx.beginPath();
+      ctx.arc(x - 18, y - 22, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#b56b00';
+      ctx.font = 'bold 54px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('$', x, y + 19);
+      ctx.restore();
+    }
+
     function drawOverlay() {
       if (running && !finished) return;
       ctx.save();
+
+      if (finished && lives > 0) {
+        // 第 10 題完成後的專屬遊戲結束畫面
+        ctx.fillStyle = 'rgba(7, 18, 8, 0.68)';
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = 'rgba(255, 255, 245, 0.97)';
+        ctx.fillRect(210, 120, 860, 540);
+        ctx.strokeStyle = '#ffd83d';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(210, 120, 860, 540);
+        ctx.strokeStyle = '#78c952';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(230, 140, 820, 500);
+
+        drawBigPrizeCoin(W / 2, 225);
+
+        ctx.fillStyle = '#24431a';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 48px "Microsoft JhengHei"';
+        ctx.fillText('恭喜！收集完成', W / 2, 330);
+
+        ctx.font = 'bold 28px "Microsoft JhengHei"';
+        ctx.fillText('你已成功收集到全部 10 枚健康金幣！', W / 2, 380);
+
+        ctx.font = '24px "Microsoft JhengHei"';
+        ctx.fillText(`最終分數：${score}　最佳分數：${bestScore}`, W / 2, 425);
+
+        const accuracy = attempts === 0 ? 100 : Math.round((correctAnswers / attempts) * 100);
+        ctx.fillText(`答對率：${accuracy}%（正確 ${correctAnswers} 次／嘗試 ${attempts} 次）`, W / 2, 462);
+
+        drawFinalCoins(W / 2, 520);
+
+        ctx.font = '22px "Microsoft JhengHei"';
+        ctx.fillText('按下方「重新開始」可再次挑戰', W / 2, 595);
+        ctx.restore();
+        return;
+      }
+
+      // 初始畫面或失敗畫面
       ctx.fillStyle = 'rgba(10,16,8,0.52)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = 'rgba(255,255,255,0.94)';
-      ctx.fillRect(260, 255, 760, 220);
+      ctx.fillRect(260, 255, 760, 230);
       ctx.strokeStyle = '#78c952';
       ctx.lineWidth = 5;
-      ctx.strokeRect(260, 255, 760, 220);
+      ctx.strokeRect(260, 255, 760, 230);
       ctx.fillStyle = '#24431a';
       ctx.textAlign = 'center';
       ctx.font = 'bold 40px "Microsoft JhengHei"';
-      ctx.fillText(finished ? (lives > 0 ? '恭喜通關！' : '遊戲結束') : '森林平台跳躍健康問答', W / 2, 330);
+      ctx.fillText(finished ? '遊戲結束' : '跳跳跳健康問答', W / 2, 330);
       ctx.font = '24px "Microsoft JhengHei"';
-      ctx.fillText(finished ? `最終分數：${score}` : '頂正確答案箱，消除箱子並跳上下一層', W / 2, 378);
+      ctx.fillText(finished ? `最終分數：${score}` : '碰撞正確答案，消除箱子並跳上下一層', W / 2, 378);
       ctx.fillText(finished ? '按重新開始可再次挑戰' : '按上方「開始遊戲」開始', W / 2, 420);
       ctx.restore();
     }
@@ -652,6 +988,9 @@
       drawUpperPlatform();
       drawBrickLineExceptGate();
       answerBoxes().forEach(drawAnswerBox);
+      drawUpperPlatform();
+      drawCoin();
+      drawParticles();
       drawGroundPlatform();
       if (running) drawPlayer();
       drawPopup();
@@ -659,7 +998,7 @@
     }
 
     function runSanityChecks() {
-      console.assert(levels.length === 4, '應有 4 題');
+      console.assert(levels.length === 10, '應有 10 題');
       console.assert(answerBoxes().length === 4, '每題應有 4 個答案箱');
       console.assert(W % BRICK_W !== 1, '磚牆會由 drawBrickLineExceptGate 連續補滿整個畫面寬度');
       console.assert(groundY > gateY, '地面應在答案牆下方');
@@ -672,6 +1011,11 @@
       console.assert(reachableHeadY + player.h <= upperPlatformY, '角色跳躍高度必須足以到達上層平台');
       console.log('v2.1 position check', { groundY, gateY, upperPlatformY, boxBottomY, playerTopAtGround, reachableHeadY, jump: player.jump });
       console.assert(levels.every(l => l.correct >= 0 && l.correct < l.options.length), '所有正確答案索引需有效');
+      const c = coinRect();
+      console.assert(c.y + c.h <= upperPlatformY, '金幣應該放在上層平台上方');
+      console.assert(typeof triggerWrongBoxFeedback === 'function', '錯誤答案箱應有晃動反饋函式');
+      console.assert(typeof playCoinSound === 'function', '應有金幣音效函式');
+      console.assert(typeof spawnParticles === 'function', '應有粒子特效函式');
     }
 
     function loop() {
@@ -694,6 +1038,7 @@
 
     startBtn.addEventListener('click', startGame);
     restartBtn.addEventListener('click', startGame);
+    winRestartBtn.addEventListener('click', startGame);
 
     updateHud();
     runSanityChecks();
