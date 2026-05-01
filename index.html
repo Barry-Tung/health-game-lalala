@@ -73,6 +73,46 @@
       border-radius: 999px;
     }
     .win-restart.show { display: block; }
+    
+    /* 商店介面樣式 */
+    .shop-modal {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(20, 35, 20, 0.95);
+      border: 4px solid #78c952;
+      border-radius: 16px;
+      padding: 30px;
+      width: 480px;
+      text-align: center;
+      z-index: 20;
+      display: none;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    }
+    .shop-modal.show { display: block; }
+    .shop-modal h2 { margin-top: 0; color: #ffd83d; }
+    .shop-items {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .shop-btn {
+      background: #2b4a24;
+      color: #fff;
+      border: 2px solid #4a803a;
+      transition: background 0.2s;
+    }
+    .shop-btn:hover { background: #3a6331; }
+    .shop-btn:disabled { background: #555; border-color: #444; color: #888; cursor: not-allowed; }
+    .close-shop {
+      background: #ffd83d;
+      color: #3a2600;
+      width: 100%;
+      margin-top: 10px;
+    }
+
     canvas {
       display: block;
       width: 100%;
@@ -92,8 +132,9 @@
     <div class="toolbar">
       <div class="hud">
         <div class="pill" id="scoreText">分數：0</div>
+        <div class="pill" id="coinText">金幣：0</div>
         <div class="pill" id="lifeText">生命：3</div>
-        <div class="pill" id="levelText">題目：1 / 10</div>
+        <div class="pill" id="levelText">題目：1 / 20</div>
       </div>
       <div class="btns">
         <button class="start" id="startBtn">開始遊戲</button>
@@ -104,10 +145,23 @@
     <div class="stage">
       <canvas id="gameCanvas" width="1280" height="820"></canvas>
       <button class="win-restart" id="winRestartBtn">重新開始</button>
+      
+      <!-- 商店介面 -->
+      <div id="shopModal" class="shop-modal">
+        <h2>中場休息：健康補給站</h2>
+        <p style="font-size:1.2rem;">累計持有金幣：<strong id="shopCoinsDisplay" style="color:#ffd83d;">0</strong></p>
+        <div class="shop-items">
+          <button class="shop-btn" id="buySkinBtn">購買：藍色服裝 (3 金幣)</button>
+          <button class="shop-btn" id="buyShieldBtn">購買：一次性防護罩 (2 金幣)</button>
+          <button class="shop-btn" id="buySprintShoesBtn">購買：衝刺跑鞋 (4 金幣)</button>
+          <button class="shop-btn" id="buyTrailBtn">購買：炫彩殘影 (5 金幣)</button>
+        </div>
+        <button class="close-shop" id="closeShopBtn">離開商店，繼續挑戰</button>
+      </div>
     </div>
 
     <div class="note">
-      操作：A / D 或 ← / → 移動，W / ↑ / 空白鍵跳躍。從地面跳起來碰撞正確答案，答案箱會消失並開出通道；答錯或頂到磚塊不會有反應。
+      操作：A / D 或 ← / → 移動，W / ↑ / 空白鍵跳躍。碰撞正確答案開通道路，第 7、12 與 17 題結束後將開啟道具商店。連續答對 10 題有額外驚喜！
     </div>
   </div>
 
@@ -115,11 +169,21 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreText = document.getElementById('scoreText');
+    const coinText = document.getElementById('coinText');
     const lifeText = document.getElementById('lifeText');
     const levelText = document.getElementById('levelText');
     const startBtn = document.getElementById('startBtn');
     const restartBtn = document.getElementById('restartBtn');
     const winRestartBtn = document.getElementById('winRestartBtn');
+    
+    // 商店 DOM 元素
+    const shopModal = document.getElementById('shopModal');
+    const shopCoinsDisplay = document.getElementById('shopCoinsDisplay');
+    const buySkinBtn = document.getElementById('buySkinBtn');
+    const buyShieldBtn = document.getElementById('buyShieldBtn');
+    const buySprintShoesBtn = document.getElementById('buySprintShoesBtn');
+    const buyTrailBtn = document.getElementById('buyTrailBtn'); 
+    const closeShopBtn = document.getElementById('closeShopBtn');
 
     const W = canvas.width;
     const H = canvas.height;
@@ -131,10 +195,15 @@
     const BOX_H = 74;
 
     const groundY = 742;
-    // v2.1 位置修正版：這次把答案牆明顯下移到角色跳得到的位置。
-    // 答案箱底部約在 626px；角色站在地面時頭頂約在 684px，正常跳躍可碰到。
     const gateY = 570;
     const upperPlatformY = 500;
+
+    // 單局遊戲變數 
+    let gameCoins = 0;
+    let equippedSkin = '#d93228';
+    let bestScore = Number(localStorage.getItem('healthGameBestScore') || 0);
+    let hasSprintShoes = false;
+    let hasTrail = false; 
 
     const player = {
       x: 610,
@@ -143,73 +212,34 @@
       h: 58,
       vx: 0,
       vy: 0,
-      speed: 5.2,
+      speed: 5.2, 
       jump: 18.6,
       onGround: false,
-      face: 1
+      face: 1,
+      hasShield: false
     };
 
     const levels = [
-      {
-        question: '第 1 題：一般成人每週建議至少多少中等強度身體活動？',
-        correct: 1,
-        options: ['30 分鐘', '150 分鐘', '60 分鐘', '300 分鐘'],
-        explain: '成人每週建議至少 150 分鐘中等強度身體活動。'
-      },
-      {
-        question: '第 2 題：多數成人每日建議睡眠時間最接近哪一項？',
-        correct: 2,
-        options: ['5 小時', '11 小時', '7–9 小時', '3 小時'],
-        explain: '多數成人建議每日睡眠 7–9 小時。'
-      },
-      {
-        question: '第 3 題：哪一項較有助於預防高血壓？',
-        correct: 0,
-        options: ['減少鈉攝取', '高鹽飲食', '長期熬夜', '含糖飲料'],
-        explain: '減少鈉攝取有助於血壓控制。'
-      },
-      {
-        question: '第 4 題：下列哪一項較符合健康飲食？',
-        correct: 3,
-        options: ['常吃炸物', '每天宵夜', '含糖飲料', '蔬果全穀'],
-        explain: '蔬果與全穀類富含營養。'
-      },
-      {
-        question: '第 5 題：每日建議飲水量最接近哪一項？',
-        correct: 1,
-        options: ['500 ml', '1500–2000 ml', '300 ml', '4000 ml'],
-        explain: '一般成人每日建議約 1500–2000 ml。'
-      },
-      {
-        question: '第 6 題：哪種行為有助於心理健康？',
-        correct: 2,
-        options: ['長時間滑手機', '熬夜追劇', '規律運動', '過度工作'],
-        explain: '規律運動有助於減壓與情緒調節。'
-      },
-      {
-        question: '第 7 題：預防流感最有效的方法之一是？',
-        correct: 0,
-        options: ['接種疫苗', '喝可樂', '熬夜', '少洗手'],
-        explain: '接種疫苗能有效預防流感。'
-      },
-      {
-        question: '第 8 題：哪一項屬於良好的飲食習慣？',
-        correct: 1,
-        options: ['暴飲暴食', '定時定量', '只吃零食', '跳過早餐'],
-        explain: '定時定量有助於維持健康。'
-      },
-      {
-        question: '第 9 題：久坐族建議多久起身活動一次？',
-        correct: 2,
-        options: ['3 小時', '不用活動', '30–60 分鐘', '一天一次'],
-        explain: '每 30–60 分鐘起身活動較健康。'
-      },
-      {
-        question: '第 10 題：哪一項有助於維持心血管健康？',
-        correct: 3,
-        options: ['高油飲食', '抽菸', '缺乏運動', '規律運動'],
-        explain: '規律運動有助於心血管健康。'
-      }
+      { question: '第 1 題：一般成人每週建議至少多少中等強度身體活動？', correct: 1, options: ['30 分鐘', '150 分鐘', '60 分鐘', '300 分鐘'], explain: '成人每週建議至少 150 分鐘中等強度身體活動。' },
+      { question: '第 2 題：多數成人每日建議睡眠時間最接近哪一項？', correct: 2, options: ['5 小時', '11 小時', '7–9 小時', '3 小時'], explain: '多數成人建議每日睡眠 7–9 小時。' },
+      { question: '第 3 題：哪一項較有助於預防高血壓？', correct: 0, options: ['減少鈉攝取', '高鹽飲食', '長期熬夜', '含糖飲料'], explain: '減少鈉攝取有助於血壓控制。' },
+      { question: '第 4 題：下列哪一項較符合健康飲食？', correct: 3, options: ['常吃炸物', '每天宵夜', '含糖飲料', '蔬果全穀'], explain: '蔬果與全穀類富含營養。' },
+      { question: '第 5 題：每日建議飲水量最接近哪一項？', correct: 1, options: ['500 ml', '1500–2000 ml', '300 ml', '4000 ml'], explain: '一般成人每日建議約 1500–2000 ml。' },
+      { question: '第 6 題：哪種行為有助於心理健康？', correct: 2, options: ['長時間滑手機', '熬夜追劇', '規律運動', '過度工作'], explain: '規律運動有助於減壓與情緒調節。' },
+      { question: '第 7 題：預防流感最有效的方法之一是？', correct: 0, options: ['接種疫苗', '喝可樂', '熬夜', '少洗手'], explain: '接種疫苗能有效預防流感。' },
+      { question: '第 8 題：哪一項屬於良好的飲食習慣？', correct: 1, options: ['暴飲暴食', '定時定量', '只吃零食', '跳過早餐'], explain: '定時定量有助於維持健康。' },
+      { question: '第 9 題：久坐族建議多久起身活動一次？', correct: 2, options: ['3 小時', '不用活動', '30–60 分鐘', '一天一次'], explain: '每 30–60 分鐘起身活動較健康。' },
+      { question: '第 10 題：哪一項有助於維持心血管健康？', correct: 3, options: ['高油飲食', '抽菸', '缺乏運動', '規律運動'], explain: '規律運動有助於心血管健康。' },
+      { question: '第 11 題：在台灣，一般成人的健康體位（BMI）正常範圍大約落在哪裡？', correct: 0, options: ['18.5 ~ 24', '15 ~ 18', '24 ~ 27', '超過 27'], explain: '國民健康署建議成人 BMI 應維持在 18.5 (含) 至 24 (未滿) 之間。' },
+      { question: '第 12 題：下列哪一種營養素最能促進腸胃蠕動、預防便祕？', correct: 1, options: ['蛋白質', '膳食纖維', '飽和脂肪', '維生素C'], explain: '膳食纖維能增加糞便體積，促進腸胃蠕動與腸道健康。' },
+      { question: '第 13 題：為了擁有良好的睡眠品質，睡前哪一種行為最不建議？', correct: 2, options: ['聽輕音樂', '拉伸放鬆', '滑手機看短影', '閱讀實體書'], explain: '螢幕藍光及強烈的聲光刺激會抑制褪黑激素分泌，嚴重影響睡眠。' },
+      { question: '第 14 題：搬運重物時，下列哪一種姿勢最能保護脊椎避免受傷？', correct: 1, options: ['彎腰不彎膝蓋', '彎膝蓋並挺直背部', '單手提重物', '快速猛力拉起'], explain: '彎曲膝蓋、利用腿部力量並保持背部挺直，能大幅減少脊椎壓力。' },
+      { question: '第 15 題：正確的洗手步驟中，搓揉雙手的時間建議至少維持多久？', correct: 1, options: ['5 秒', '20 秒', '1 分鐘', '隨便沖水就好'], explain: '確實搓洗雙手至少 20 秒（內外夾弓大立腕），才能有效去除手部病菌。' },
+      { question: '第 16 題：身體要自然合成「維生素D」，最簡單且有效的方法是？', correct: 2, options: ['每天喝手搖飲', '待在冷氣房', '適度曬太陽', '熬夜'], explain: '人體皮膚在適度接受日照後，能自行合成維生素D，有助於骨骼與免疫健康。' },
+      { question: '第 17 題：根據「20-20-20」護眼法則，用眼每 20 分鐘應該要？', correct: 1, options: ['閉眼 20 分鐘', '看 20呎外 20秒', '滴20滴眼藥水', '看螢幕 20 秒'], explain: '每用眼 20 分鐘，應眺望 20 呎（約 6 公尺）外遠方至少 20 秒來放鬆睫狀肌。' },
+      { question: '第 18 題：關於日常減糖，下列哪一個觀念比較正確？', correct: 3, options: ['水果糖分可無限吃', '蜂蜜不是糖可多喝', '果汁等同新鮮水果', '喝無糖茶或白開水'], explain: '減少額外添加糖的攝取，以無糖飲品或白開水取代含糖飲料最健康。' },
+      { question: '第 19 題：維持良好的口腔健康，每天至少應該刷幾次牙？', correct: 0, options: ['2 次', '不用刷', '一週 1 次', '只有早上刷'], explain: '每天至少應在早晨與睡前刷牙各一次，並建議搭配使用牙線。' },
+      { question: '第 20 題：吃油炸食物容易攝取過多熱量，哪種烹調方式較健康？', correct: 1, options: ['紅燒', '清蒸或水煮', '勾芡', '糖醋'], explain: '清蒸或水煮能保留食物原味，且不需要額外添加大量油脂。' }
     ];
 
     let running = false;
@@ -226,14 +256,21 @@
     let attempts = 0;
     let correctAnswers = 0;
     let wrongAnswers = 0;
-    let bestScore = Number(localStorage.getItem('healthGameBestScore') || 0);
-    const wrongBoxShake = {}; // 記錄錯誤答案箱晃動時間，key = 答案索引
-    const particles = []; // 金幣與答對特效粒子
+    let lastShopLevel = -1; // 追蹤最後一次開啟商店的題號，避免重複開啟
+    let currentCombo = 0;   // 追蹤連續答對次數
+    let extraCoins = [];    // 存放散落的額外金幣
 
-    const coinImage = new Image();
-    coinImage.src = './coin.png'; // 可選：若同資料夾放 coin.png，會使用圖片；否則使用程式畫的金幣
-    let coinImageLoaded = false;
-    coinImage.onload = () => { coinImageLoaded = true; };
+    const wrongBoxShake = {};
+    const particles = [];
+    const trailParticles = []; 
+
+    const hazards = [];
+    let hazardSpawnTimer = 0;
+    const HAZARD_TYPES = [
+      { name: '炸雞', color: '#ff9d00', emoji: '🍗' },
+      { name: '珍奶', color: '#8b4513', emoji: '🧋' },
+      { name: '甜甜圈', color: '#ff69b4', emoji: '🍩' }
+    ];
 
     let audioCtx = null;
     function playTone(freq = 440, duration = 0.08, type = 'sine', volume = 0.08) {
@@ -264,6 +301,7 @@
     }
 
     function answerBoxes() {
+      if (currentLevel >= levels.length) return []; 
       const startX = 165;
       const gap = 142;
       return levels[currentLevel].options.map((text, i) => ({
@@ -279,11 +317,23 @@
 
     function startGame() {
       winRestartBtn.classList.remove('show');
+      shopModal.classList.remove('show');
       running = true;
       finished = false;
       currentLevel = 0;
       score = 0;
       lives = 3;
+      
+      // 確保重新開始時重置所有裝備、金幣與連擊
+      gameCoins = 0; 
+      equippedSkin = '#d93228';
+      hasSprintShoes = false;
+      hasTrail = false; 
+      player.speed = 5.2; 
+      player.hasShield = false;
+      currentCombo = 0;
+      extraCoins = [];
+      
       gateOpened = false;
       transitionTimer = 0;
       coinVisible = false;
@@ -291,7 +341,12 @@
       attempts = 0;
       correctAnswers = 0;
       wrongAnswers = 0;
+      lastShopLevel = -1;
       particles.length = 0;
+      trailParticles.length = 0; 
+      hazards.length = 0;
+      hazardSpawnTimer = 0;
+      
       Object.keys(wrongBoxShake).forEach(key => delete wrongBoxShake[key]);
       setPlayerToGround();
       setPopup('頂到正確答案箱，箱子會消失並開通往上一層的路。', 180);
@@ -308,6 +363,7 @@
 
     function updateHud() {
       scoreText.textContent = `分數：${score}`;
+      coinText.textContent = `金幣：${gameCoins}`;
       lifeText.textContent = `生命：${lives}`;
       levelText.textContent = `題目：${Math.min(currentLevel + 1, levels.length)} / ${levels.length}`;
     }
@@ -326,10 +382,6 @@
       }
     }
 
-    function isCorrectBox(box) {
-      return box.idx === levels[currentLevel].correct;
-    }
-
     function openGate(box) {
       gateOpened = true;
       coinVisible = true;
@@ -337,22 +389,52 @@
       attempts += 1;
       correctAnswers += 1;
       score += 10;
+      currentCombo += 1; 
+
+      if (currentCombo > 0 && currentCombo % 10 === 0) {
+        spawnExtraCoins(3);
+        setPopup(`【連擊！】${levels[currentLevel].explain} 噴出額外金幣，請收集「所有金幣」過關！`, 220);
+        playCorrectSound();
+        setTimeout(playCoinSound, 150); 
+      } else {
+        setPopup(`答對了！${levels[currentLevel].explain} 請撿取金幣進入下一題。`, 180);
+        playCorrectSound();
+      }
+
       updateHud();
-      setPopup(`答對了！${levels[currentLevel].explain} 請撿取金幣進入下一題。`, 180);
-      playCorrectSound();
       spawnParticles(box.x + box.w / 2, box.y + box.h / 2, '#89ff4d', 18);
-      // 答對後答案箱消失，角色會被往上帶一段，方便穿過通道跳到上層平台。
       player.y = box.y + box.h + 2;
       player.vy = -17.2;
     }
 
     function coinRect() {
-      return {
-        x: 610,
-        y: upperPlatformY - 62,
-        w: 46,
-        h: 46
-      };
+      return { x: 610, y: upperPlatformY - 62, w: 46, h: 46 };
+    }
+
+    // 產生散落並帶有物理彈跳效果的額外金幣 (現在只會在上層平台彈跳)
+    function spawnExtraCoins(count) {
+      const startX = 610; 
+      const startY = upperPlatformY - 62;
+      for (let i = 0; i < count; i++) {
+        extraCoins.push({
+          x: startX,
+          y: startY,
+          w: 46,
+          h: 46,
+          vx: (Math.random() - 0.5) * 18, // 橫向隨機爆發力度
+          vy: -7 - Math.random() * 8,     // 往上噴發的力度
+          landed: false,
+          targetY: upperPlatformY // 全部設定在上層平台掉落，避免掉到下層卡關
+        });
+      }
+    }
+
+    // 檢查是否全場金幣都吃光了，清光才進入下一題
+    function checkAllCoinsCollected() {
+      if (!coinVisible && extraCoins.length === 0 && gateOpened) {
+        setPopup('準備進入下一題！', 45);
+        transitionTimer = 45;
+      }
     }
 
     function collectCoin() {
@@ -360,18 +442,19 @@
       coinCollected = true;
       coinVisible = false;
       score += 5;
+      gameCoins += 1; 
       updateHud();
-      setPopup('獲得金幣！準備進入下一題。', 80);
       playCoinSound();
       const c = coinRect();
       spawnParticles(c.x + c.w / 2, c.y + c.h / 2, '#ffd83d', 26);
-      transitionTimer = 45;
+      checkAllCoinsCollected(); // 呼叫全收集檢查
     }
 
     function triggerWrongBoxFeedback(box) {
       wrongBoxShake[box.idx] = 24;
       attempts += 1;
       wrongAnswers += 1;
+      currentCombo = 0; // 撞錯箱子，連擊中斷
       playWrongSound();
       setPopup('這不是正確答案，請再試一次。', 55);
     }
@@ -388,8 +471,7 @@
         const angle = Math.random() * Math.PI * 2;
         const speed = 1.5 + Math.random() * 4.2;
         particles.push({
-          x,
-          y,
+          x, y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed - 1.8,
           life: 38 + Math.random() * 22,
@@ -410,8 +492,83 @@
       }
     }
 
+    function updateTrailParticles() {
+      if (hasTrail && running && !finished && (Math.abs(player.vx) > 0.5 || Math.abs(player.vy) > 0.5)) {
+        for(let i = 0; i < 2; i++) {
+          trailParticles.push({
+            x: player.x + player.w / 2 + (Math.random() - 0.5) * 20,
+            y: player.y + player.h / 2 + (Math.random() - 0.5) * 20 + 10,
+            life: 25,
+            maxLife: 25,
+            color: `hsl(${(Date.now() / 8) % 360}, 100%, 65%)`, 
+            size: 5 + Math.random() * 6
+          });
+        }
+      }
+
+      for (let i = trailParticles.length - 1; i >= 0; i--) {
+        const p = trailParticles[i];
+        p.life--;
+        p.y -= 0.3; 
+        p.size *= 0.92; 
+        if (p.life <= 0) {
+          trailParticles.splice(i, 1);
+        }
+      }
+    }
+
+    function updateHazards() {
+      if (currentLevel < 2 || !running || finished || transitionTimer > 0) return;
+
+      hazardSpawnTimer--;
+      if (hazardSpawnTimer <= 0) {
+        hazards.push({
+          x: Math.random() * (W - 40),
+          y: -50,
+          w: 45,
+          h: 45,
+          vy: 2 + Math.random() * 3,
+          type: HAZARD_TYPES[Math.floor(Math.random() * HAZARD_TYPES.length)]
+        });
+        hazardSpawnTimer = 100 + Math.random() * 80;
+      }
+
+      for (let i = hazards.length - 1; i >= 0; i--) {
+        const h = hazards[i];
+        h.y += h.vy;
+
+        if (rectsIntersect(player, h)) {
+          hazards.splice(i, 1);
+          
+          if (player.hasShield) {
+            player.hasShield = false;
+            playCorrectSound();
+            setPopup(`防護罩成功抵擋了 ${h.type.name}！`, 60);
+            spawnParticles(player.x + player.w/2, player.y + player.h/2, '#64c8ff', 20);
+            continue;
+          }
+
+          lives -= 1;
+          playWrongSound();
+          setPopup(`哎呀！被${h.type.name}砸中了，生命值 -1！`, 60);
+          spawnParticles(player.x + player.w/2, player.y + player.h/2, '#ff4444', 10);
+          updateHud();
+          
+          if (lives <= 0) {
+            finished = true;
+            setPopup('體力耗盡，遊戲結束！', 99999);
+            winRestartBtn.classList.add('show');
+          }
+          continue;
+        }
+
+        if (h.y > H) hazards.splice(i, 1);
+      }
+    }
+
     function nextLevel() {
       currentLevel += 1;
+      
       if (currentLevel >= levels.length) {
         finished = true;
         bestScore = Math.max(bestScore, score);
@@ -421,21 +578,135 @@
         updateHud();
         return;
       }
+
+      // 檢查是否符合開啟商店的條件
+      if ((currentLevel === 7 || currentLevel === 12 || currentLevel === 17) && lastShopLevel !== currentLevel) {
+        lastShopLevel = currentLevel; 
+        openShop();
+        return; 
+      }
+
+      resumeNextLevelSetup();
+    }
+
+    function resumeNextLevelSetup() {
       gateOpened = false;
       transitionTimer = 0;
       coinVisible = false;
       coinCollected = false;
+      hazards.length = 0; 
+      extraCoins = []; // 雙重保險
       Object.keys(wrongBoxShake).forEach(key => delete wrongBoxShake[key]);
       setPlayerToGround();
       setPopup('進入下一題。請碰撞出正確答案。', 150);
       updateHud();
     }
 
+    // 商店系統邏輯
+    function openShop() {
+      running = false;
+      shopModal.classList.add('show');
+      updateShopUI();
+    }
+
+    function updateShopUI() {
+      shopCoinsDisplay.textContent = gameCoins;
+      // 判斷藍色服裝按鈕狀態
+      if (equippedSkin === '#24869a') {
+        buySkinBtn.textContent = '已裝備：藍色服裝';
+        buySkinBtn.disabled = true;
+      } else if (gameCoins < 3) {
+        buySkinBtn.textContent = '金幣不足 (需 3 金幣)';
+        buySkinBtn.disabled = true;
+      } else {
+        buySkinBtn.textContent = '購買：藍色服裝 (3 金幣)';
+        buySkinBtn.disabled = false;
+      }
+
+      // 判斷防護罩按鈕狀態
+      if (player.hasShield) {
+        buyShieldBtn.textContent = '已擁有防護罩';
+        buyShieldBtn.disabled = true;
+      } else if (gameCoins < 2) {
+        buyShieldBtn.textContent = '金幣不足 (需 2 金幣)';
+        buyShieldBtn.disabled = true;
+      } else {
+        buyShieldBtn.textContent = '購買：一次性防護罩 (2 金幣)';
+        buyShieldBtn.disabled = false;
+      }
+
+      // 判斷衝刺跑鞋按鈕狀態
+      if (hasSprintShoes) {
+        buySprintShoesBtn.textContent = '已裝備：衝刺跑鞋 (移動加速)';
+        buySprintShoesBtn.disabled = true;
+      } else if (gameCoins < 4) {
+        buySprintShoesBtn.textContent = '金幣不足 (需 4 金幣)';
+        buySprintShoesBtn.disabled = true;
+      } else {
+        buySprintShoesBtn.textContent = '購買：衝刺跑鞋 (4 金幣)';
+        buySprintShoesBtn.disabled = false;
+      }
+
+      // 判斷炫彩殘影按鈕狀態
+      if (hasTrail) {
+        buyTrailBtn.textContent = '已裝備：炫彩殘影 (拖曳特效)';
+        buyTrailBtn.disabled = true;
+      } else if (gameCoins < 5) {
+        buyTrailBtn.textContent = '金幣不足 (需 5 金幣)';
+        buyTrailBtn.disabled = true;
+      } else {
+        buyTrailBtn.textContent = '購買：炫彩殘影 (5 金幣)';
+        buyTrailBtn.disabled = false;
+      }
+    }
+
+    buySkinBtn.addEventListener('click', () => {
+      if (gameCoins >= 3 && equippedSkin !== '#24869a') {
+        gameCoins -= 3;
+        equippedSkin = '#24869a'; 
+        updateShopUI();
+        updateHud();
+      }
+    });
+
+    buyShieldBtn.addEventListener('click', () => {
+      if (gameCoins >= 2 && !player.hasShield) {
+        gameCoins -= 2;
+        player.hasShield = true;
+        updateShopUI();
+        updateHud();
+      }
+    });
+
+    buySprintShoesBtn.addEventListener('click', () => {
+      if (gameCoins >= 4 && !hasSprintShoes) {
+        gameCoins -= 4;
+        hasSprintShoes = true;
+        player.speed = 8.2; 
+        updateShopUI();
+        updateHud();
+        setPopup('獲得衝刺跑鞋！移動速度大幅提升！', 80);
+      }
+    });
+
+    buyTrailBtn.addEventListener('click', () => {
+      if (gameCoins >= 5 && !hasTrail) {
+        gameCoins -= 5;
+        hasTrail = true;
+        updateShopUI();
+        updateHud();
+        setPopup('獲得炫彩殘影！現在移動時會有彩虹光輝！', 80);
+      }
+    });
+
+    closeShopBtn.addEventListener('click', () => {
+      shopModal.classList.remove('show');
+      running = true;
+      resumeNextLevelSetup();
+    });
+
     function rectsIntersect(a, b) {
-      return a.x < b.x + b.w &&
-             a.x + a.w > b.x &&
-             a.y < b.y + b.h &&
-             a.y + a.h > b.y;
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
     }
 
     function getBarrierRects() {
@@ -443,25 +714,18 @@
       const boxes = answerBoxes();
       const correctIdx = levels[currentLevel].correct;
       const correctBox = boxes[correctIdx];
-      const openGap = gateOpened
-        ? { x: correctBox.x - 8, y: gateY - 6, w: correctBox.w + 16, h: BOX_H + 24 }
-        : null;
+      const openGap = gateOpened ? { x: correctBox.x - 8, y: gateY - 6, w: correctBox.w + 16, h: BOX_H + 24 } : null;
 
-      // 答案箱本身也是障礙物；只有正確答案箱在答對後會消失。
       for (const box of boxes) {
         if (!box.removed) {
           rects.push({ ...box, type: box.idx === correctIdx ? 'correctBox' : 'wrongBox' });
         }
       }
-
-      // 磚牆改成完整連續的一整排，避免答案箱之間出現漏洞。
-      // 視覺上答案箱會蓋在磚牆上；答對後只在正確答案箱的位置打開通道。
       for (let x = 0; x < W; x += BRICK_W) {
         const brick = { x, y: gateY, w: BRICK_W, h: BRICK_H, type: 'brick' };
         const insideOpenedGap = openGap && rectsIntersect(brick, openGap);
         if (!insideOpenedGap) rects.push(brick);
       }
-
       return rects;
     }
 
@@ -475,9 +739,6 @@
         const prevRight = prev.x + player.w;
         const prevLeft = prev.x;
 
-        // 從下方往上頂到障礙物：
-        // 1. 正確答案箱：消失並開通道
-        // 2. 錯誤答案箱或磚牆：像撞到天花板一樣彈回，不能穿越
         if (prevTop >= solid.y + solid.h - 2 && player.vy < 0) {
           player.y = solid.y + solid.h + 0.5;
           if (solid.type === 'correctBox' && !gateOpened) {
@@ -489,7 +750,6 @@
           return;
         }
 
-        // 從上方落到障礙物，可站在磚塊或錯誤答案箱上，但不能穿過去。
         if (prevBottom <= solid.y + 2 && player.vy >= 0) {
           player.y = solid.y - player.h;
           player.vy = 0;
@@ -497,7 +757,6 @@
           return;
         }
 
-        // 左右撞到障礙物時擋住，避免側邊穿牆。
         if (prevRight <= solid.x + 2) {
           player.x = solid.x - player.w;
           player.vx = 0;
@@ -525,6 +784,35 @@
         transitionTimer--;
         updateWrongBoxShake();
         updateParticles();
+        updateTrailParticles(); 
+        
+        // 過渡期間還是允許玩家移動（看起來比較流暢）
+        if (keys.ArrowLeft || keys.a || keys.A) {
+          player.vx = -player.speed;
+          player.face = -1;
+        } else if (keys.ArrowRight || keys.d || keys.D) {
+          player.vx = player.speed;
+          player.face = 1;
+        } else {
+          player.vx *= 0.76;
+          if (Math.abs(player.vx) < 0.12) player.vx = 0;
+        }
+        player.x += player.vx;
+        if (player.x < 0) player.x = 0;
+        if (player.x + player.w > W) player.x = W - player.w;
+
+        // 在過渡期間檢查額外金幣碰撞
+        for (let i = extraCoins.length - 1; i >= 0; i--) {
+          if (rectsIntersect(player, extraCoins[i])) {
+            score += 5;
+            gameCoins += 1;
+            updateHud();
+            playCoinSound();
+            spawnParticles(extraCoins[i].x + extraCoins[i].w / 2, extraCoins[i].y + extraCoins[i].h / 2, '#ffd83d', 26);
+            extraCoins.splice(i, 1);
+          }
+        }
+
         if (transitionTimer === 0) nextLevel();
         return;
       }
@@ -554,131 +842,76 @@
 
       player.onGround = false;
 
-      // 地面碰撞
       if (prevBottom <= groundY && player.y + player.h >= groundY) {
         player.y = groundY - player.h;
         player.vy = 0;
         player.onGround = true;
       }
 
-      // 答案箱與磚牆碰撞：正確箱消失；錯誤箱與牆會阻擋角色。
       resolveBarrierCollision(prev);
 
-      // 上層平台：只有答對開門後才允許站上去。站上去後不直接換題，必須吃到金幣才進入下一題。
       if (gateOpened && prevBottom <= upperPlatformY && player.y + player.h >= upperPlatformY) {
         player.y = upperPlatformY - player.h;
         player.vy = 0;
         player.onGround = true;
       }
 
-      // 金幣獎賞：答對後出現在上層平台，角色碰到金幣後才進入下一題。
       if (coinVisible && rectsIntersect(player, coinRect())) {
         collectCoin();
+      }
+
+      // 處理額外金幣的物理動畫
+      for (let i = 0; i < extraCoins.length; i++) {
+        let c = extraCoins[i];
+        if (!c.landed) {
+          c.vy += 0.5; // 重力
+          c.x += c.vx;
+          c.y += c.vy;
+
+          // 左右邊界反彈
+          if (c.x < 0) { c.x = 0; c.vx *= -0.6; }
+          if (c.x + c.w > W) { c.x = W - c.w; c.vx *= -0.6; }
+
+          // 落地反彈
+          if (c.y + c.h >= c.targetY) {
+            c.y = c.targetY - c.h;
+            c.vy *= -0.5; // Y軸反彈
+            c.vx *= 0.8;  // X軸摩擦力減速
+            if (Math.abs(c.vy) < 1.5) {
+              c.vy = 0;
+              c.vx = 0;
+              c.landed = true; // 金幣停在平台上
+            }
+          }
+        }
+      }
+
+      // 檢查玩家是否吃到額外金幣
+      for (let i = extraCoins.length - 1; i >= 0; i--) {
+        if (rectsIntersect(player, extraCoins[i])) {
+          score += 5;
+          gameCoins += 1;
+          updateHud();
+          playCoinSound();
+          spawnParticles(extraCoins[i].x + extraCoins[i].w / 2, extraCoins[i].y + extraCoins[i].h / 2, '#ffd83d', 26);
+          extraCoins.splice(i, 1);
+          checkAllCoinsCollected(); // 每次吃金幣都檢查是否清空全場
+        }
       }
 
       if (popupTimer > 0) popupTimer--;
       updateWrongBoxShake();
       updateParticles();
+      updateTrailParticles(); 
+      updateHazards(); 
     }
 
-    const bgImage = new Image();
-bgImage.src = "./background.png"; // 請把你的圖片命名為 background.png 並放同資料夾
-let bgLoaded = false;
-
-bgImage.onload = () => {
-  bgLoaded = true;
-};
-
-function drawBackground() {
-  if (bgLoaded) {
-    ctx.drawImage(bgImage, 0, 0, W, H);
-  } else {
-    // fallback（避免 drawImage error）
-    const gradient = ctx.createLinearGradient(0, 0, 0, H);
-    gradient.addColorStop(0, '#73cdd7');
-    gradient.addColorStop(1, '#334c25');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, W, H);
-  }
-}
-
-    function drawSun(x, y) {
-      const g = ctx.createRadialGradient(x, y, 10, x, y, 150);
-      g.addColorStop(0, 'rgba(255,255,190,0.85)');
-      g.addColorStop(1, 'rgba(255,255,190,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(x, y, 150, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    function drawCloud(x, y, s) {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(s, s);
-      ctx.fillStyle = 'rgba(255,255,255,0.26)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 26, 0, Math.PI * 2);
-      ctx.arc(34, -8, 24, 0, Math.PI * 2);
-      ctx.arc(68, 2, 31, 0, Math.PI * 2);
-      ctx.arc(34, 14, 34, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    function drawHill(x, y, w, h, color, alpha) {
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(x, y + h);
-      ctx.quadraticCurveTo(x + w * 0.2, y, x + w * 0.5, y + h * 0.22);
-      ctx.quadraticCurveTo(x + w * 0.72, y + h * 0.38, x + w, y + h);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    }
-
-    function drawTree(x, baseY, s) {
-      ctx.save();
-      ctx.translate(x, baseY);
-      ctx.scale(s, s);
-      ctx.fillStyle = '#5f351c';
-      ctx.fillRect(0, -145, 36, 145);
-      ctx.beginPath();
-      ctx.moveTo(18, -95);
-      ctx.quadraticCurveTo(75, -122, 92, -170);
-      ctx.lineTo(103, -160);
-      ctx.quadraticCurveTo(68, -105, 28, -84);
-      ctx.fill();
-      ctx.fillStyle = '#2f5a22';
-      for (let i = 0; i < 8; i++) {
-        ctx.beginPath();
-        ctx.arc(-48 + i * 24, -170 - (i % 2) * 10, 42, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.fillStyle = '#456f25';
-      for (let i = 0; i < 7; i++) {
-        ctx.beginPath();
-        ctx.arc(-32 + i * 23, -200 - (i % 2) * 8, 36, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    function drawGrass(y) {
-      ctx.fillStyle = '#547a35';
-      ctx.fillRect(0, y, W, H - y);
-      ctx.fillStyle = '#6fa44a';
-      for (let x = 0; x < W; x += 16) {
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + 8, y - 14 - (x % 5));
-        ctx.lineTo(x + 16, y);
-        ctx.fill();
-      }
-      ctx.fillStyle = 'rgba(30,45,20,0.42)';
-      for (let x = 0; x < W; x += 85) ctx.fillRect(x, y + 28, 48, 5);
+    function drawBackground() {
+      const gradient = ctx.createLinearGradient(0, 0, 0, H);
+      gradient.addColorStop(0, '#73cdd7');
+      gradient.addColorStop(1, '#334c25');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, W, H);
     }
 
     function drawVersionLabel() {
@@ -686,7 +919,7 @@ function drawBackground() {
       ctx.fillStyle = 'rgba(255,255,255,0.82)';
       ctx.font = 'bold 16px "Microsoft JhengHei"';
       ctx.textAlign = 'right';
-      ctx.fillText('v2.1 位置修正版：答案牆已下移', W - 24, 32);
+      ctx.fillText('v2.9 修正金幣掉落版', W - 24, 32);
       ctx.restore();
     }
 
@@ -716,14 +949,14 @@ function drawBackground() {
     }
 
     function drawBrickLineExceptGate() {
+      if (currentLevel >= levels.length) {
+        for (let x = 0; x < W; x += BRICK_W) drawBrick(x, gateY, BRICK_W, BRICK_H);
+        return;
+      }
       const boxes = answerBoxes();
       const correctBox = boxes[levels[currentLevel].correct];
-      const openGap = gateOpened
-        ? { x: correctBox.x - 8, y: gateY - 6, w: correctBox.w + 16, h: BOX_H + 24 }
-        : null;
+      const openGap = gateOpened ? { x: correctBox.x - 8, y: gateY - 6, w: correctBox.w + 16, h: BOX_H + 24 } : null;
 
-      // 先畫完整、整齊、連續的一整排磚牆。
-      // 答案箱會再畫在磚牆上方，因此看起來就是「答案箱夾在磚塊中」。
       for (let x = 0; x < W; x += BRICK_W) {
         const brick = { x, y: gateY, w: BRICK_W, h: BRICK_H };
         const insideOpenedGap = openGap && rectsIntersect(brick, openGap);
@@ -769,22 +1002,14 @@ function drawBackground() {
       ctx.restore();
     }
 
-    function drawCoin() {
-      if (!coinVisible) return;
-      const c = coinRect();
+    // 獨立出繪製單個金幣的函式，讓主金幣和散落金幣共用
+    function drawCoinItem(c) {
       const pulse = Math.sin(Date.now() / 120) * 3;
       const size = c.w + pulse;
-      const x = c.x + c.w / 2 - size / 2;
-      const y = c.y + c.h / 2 - size / 2;
-
-      if (coinImageLoaded) {
-        ctx.drawImage(coinImage, x, y, size, size);
-        return;
-      }
-
-      ctx.save();
       const cx = c.x + c.w / 2;
       const cy = c.y + c.h / 2;
+
+      ctx.save();
       ctx.fillStyle = '#ffd83d';
       ctx.beginPath();
       ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
@@ -808,6 +1033,11 @@ function drawBackground() {
       ctx.restore();
     }
 
+    function drawCoin() {
+      if (coinVisible) drawCoinItem(coinRect()); // 繪製主要過關金幣
+      extraCoins.forEach(drawCoinItem); // 繪製散落的額外金幣
+    }
+
     function drawParticles() {
       ctx.save();
       for (const p of particles) {
@@ -819,6 +1049,38 @@ function drawBackground() {
       }
       ctx.globalAlpha = 1;
       ctx.restore();
+    }
+
+    function drawTrailParticles() {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const p of trailParticles) {
+        ctx.globalAlpha = p.life / p.maxLife;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawHazards() {
+      hazards.forEach(h => {
+        ctx.save();
+        ctx.fillStyle = h.type.color;
+        ctx.beginPath();
+        ctx.arc(h.x + h.w/2, h.y + h.h/2, h.w/2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.font = '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(h.type.emoji, h.x + h.w/2, h.y + h.h/2 + 3);
+        ctx.restore();
+      });
     }
 
     function wrapCenter(text, x, y, maxWidth, lineHeight) {
@@ -839,7 +1101,20 @@ function drawBackground() {
     function drawPlayer() {
       ctx.save();
       ctx.translate(player.x, player.y);
-      ctx.fillStyle = '#d93228';
+      
+      // 若擁有防護罩，繪製藍色光圈
+      if (player.hasShield) {
+        ctx.beginPath();
+        ctx.arc(19, 29, 36, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(100, 200, 255, 0.2)';
+        ctx.fill();
+      }
+
+      // 套用裝備的顏色
+      ctx.fillStyle = equippedSkin;
       ctx.beginPath();
       ctx.ellipse(19, 13, 17, 10, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -874,96 +1149,30 @@ function drawBackground() {
       ctx.restore();
     }
 
-    function drawFinalCoins(centerX, y) {
-      ctx.save();
-      for (let i = 0; i < 10; i++) {
-        const x = centerX - 225 + i * 50;
-        const bounce = Math.sin(Date.now() / 180 + i * 0.6) * 4;
-        ctx.fillStyle = '#ffd83d';
-        ctx.beginPath();
-        ctx.arc(x, y + bounce, 18, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#b56b00';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-        ctx.fillStyle = '#fff4a3';
-        ctx.beginPath();
-        ctx.arc(x - 6, y - 7 + bounce, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    function drawBigPrizeCoin(x, y) {
-      const pulse = Math.sin(Date.now() / 180) * 5;
-      const r = 54 + pulse;
-      ctx.save();
-      ctx.fillStyle = '#ffd83d';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#a65f00';
-      ctx.lineWidth = 8;
-      ctx.stroke();
-      ctx.strokeStyle = '#e9a800';
-      ctx.lineWidth = 5;
-      ctx.beginPath();
-      ctx.arc(x, y, r - 18, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = '#fff4a3';
-      ctx.beginPath();
-      ctx.arc(x - 18, y - 22, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#b56b00';
-      ctx.font = 'bold 54px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('$', x, y + 19);
-      ctx.restore();
-    }
-
     function drawOverlay() {
       if (running && !finished) return;
       ctx.save();
 
       if (finished && lives > 0) {
-        // 第 10 題完成後的專屬遊戲結束畫面
         ctx.fillStyle = 'rgba(7, 18, 8, 0.68)';
         ctx.fillRect(0, 0, W, H);
-
         ctx.fillStyle = 'rgba(255, 255, 245, 0.97)';
         ctx.fillRect(210, 120, 860, 540);
         ctx.strokeStyle = '#ffd83d';
         ctx.lineWidth = 8;
         ctx.strokeRect(210, 120, 860, 540);
-        ctx.strokeStyle = '#78c952';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(230, 140, 820, 500);
-
-        drawBigPrizeCoin(W / 2, 225);
-
         ctx.fillStyle = '#24431a';
         ctx.textAlign = 'center';
         ctx.font = 'bold 48px "Microsoft JhengHei"';
-        ctx.fillText('恭喜！收集完成', W / 2, 330);
-
-        ctx.font = 'bold 28px "Microsoft JhengHei"';
-        ctx.fillText('你已成功收集到全部 10 枚健康金幣！', W / 2, 380);
-
+        ctx.fillText('恭喜！通關完成', W / 2, 330);
         ctx.font = '24px "Microsoft JhengHei"';
-        ctx.fillText(`最終分數：${score}　最佳分數：${bestScore}`, W / 2, 425);
-
-        const accuracy = attempts === 0 ? 100 : Math.round((correctAnswers / attempts) * 100);
-        ctx.fillText(`答對率：${accuracy}%（正確 ${correctAnswers} 次／嘗試 ${attempts} 次）`, W / 2, 462);
-
-        drawFinalCoins(W / 2, 520);
-
+        ctx.fillText(`最終分數：${score}　最終持有金幣：${gameCoins}`, W / 2, 425);
         ctx.font = '22px "Microsoft JhengHei"';
         ctx.fillText('按下方「重新開始」可再次挑戰', W / 2, 595);
         ctx.restore();
         return;
       }
 
-      // 初始畫面或失敗畫面
       ctx.fillStyle = 'rgba(10,16,8,0.52)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = 'rgba(255,255,255,0.94)';
@@ -991,31 +1200,12 @@ function drawBackground() {
       drawUpperPlatform();
       drawCoin();
       drawParticles();
+      drawTrailParticles(); 
+      drawHazards();
       drawGroundPlatform();
       if (running) drawPlayer();
       drawPopup();
       drawOverlay();
-    }
-
-    function runSanityChecks() {
-      console.assert(levels.length === 10, '應有 10 題');
-      console.assert(answerBoxes().length === 4, '每題應有 4 個答案箱');
-      console.assert(W % BRICK_W !== 1, '磚牆會由 drawBrickLineExceptGate 連續補滿整個畫面寬度');
-      console.assert(groundY > gateY, '地面應在答案牆下方');
-      console.assert(upperPlatformY < gateY, '上層平台應在答案牆上方');
-      const maxJumpHeight = (player.jump * player.jump) / (2 * 0.58);
-      const playerTopAtGround = groundY - player.h;
-      const reachableHeadY = playerTopAtGround - maxJumpHeight;
-      const boxBottomY = gateY - 18 + BOX_H;
-      console.assert(reachableHeadY <= boxBottomY, '角色跳躍高度必須能碰到答案箱底部');
-      console.assert(reachableHeadY + player.h <= upperPlatformY, '角色跳躍高度必須足以到達上層平台');
-      console.log('v2.1 position check', { groundY, gateY, upperPlatformY, boxBottomY, playerTopAtGround, reachableHeadY, jump: player.jump });
-      console.assert(levels.every(l => l.correct >= 0 && l.correct < l.options.length), '所有正確答案索引需有效');
-      const c = coinRect();
-      console.assert(c.y + c.h <= upperPlatformY, '金幣應該放在上層平台上方');
-      console.assert(typeof triggerWrongBoxFeedback === 'function', '錯誤答案箱應有晃動反饋函式');
-      console.assert(typeof playCoinSound === 'function', '應有金幣音效函式');
-      console.assert(typeof spawnParticles === 'function', '應有粒子特效函式');
     }
 
     function loop() {
@@ -1031,7 +1221,6 @@ function drawBackground() {
         jump();
       }
     });
-
     document.addEventListener('keyup', e => {
       keys[e.key] = false;
     });
@@ -1041,7 +1230,6 @@ function drawBackground() {
     winRestartBtn.addEventListener('click', startGame);
 
     updateHud();
-    runSanityChecks();
     loop();
   </script>
 </body>
