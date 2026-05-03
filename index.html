@@ -296,6 +296,11 @@
     const H = canvas.height;
     const keys = {};
 
+    // 背景圖片：請將 background.png 放在 HTML 檔案同一層資料夾，或上傳到 GitHub repo 同一路徑。
+    // 若圖片尚未載入或路徑錯誤，會自動使用原本的漸層背景。
+    const backgroundImg = new Image();
+    backgroundImg.src = 'background.png';
+
     const BRICK_W = 46;
     const BRICK_H = 36;
     const BOX_W = 82;
@@ -1212,6 +1217,31 @@
     }
 
     function drawBackground() {
+      if (backgroundImg.complete && backgroundImg.naturalWidth > 0) {
+        // 以 cover 方式繪製背景，避免圖片變形，並自動裁切多餘範圍。
+        const imgRatio = backgroundImg.naturalWidth / backgroundImg.naturalHeight;
+        const canvasRatio = W / H;
+        let sx = 0;
+        let sy = 0;
+        let sw = backgroundImg.naturalWidth;
+        let sh = backgroundImg.naturalHeight;
+
+        if (imgRatio > canvasRatio) {
+          sw = backgroundImg.naturalHeight * canvasRatio;
+          sx = (backgroundImg.naturalWidth - sw) / 2;
+        } else {
+          sh = backgroundImg.naturalWidth / canvasRatio;
+          sy = (backgroundImg.naturalHeight - sh) / 2;
+        }
+
+        ctx.drawImage(backgroundImg, sx, sy, sw, sh, 0, 0, W, H);
+
+        // 加上一層淡淡遮罩，讓題目文字、答案箱和角色更清楚。
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.10)';
+        ctx.fillRect(0, 0, W, H);
+        return;
+      }
+
       const gradient = ctx.createLinearGradient(0, 0, 0, H);
       gradient.addColorStop(0, '#73cdd7');
       gradient.addColorStop(1, '#334c25');
