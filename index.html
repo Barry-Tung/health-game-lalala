@@ -227,7 +227,7 @@
         <h2>中場休息：健康補給站</h2>
         <p style="font-size:1.2rem;">累計持有金幣：<strong id="shopCoinsDisplay" style="color:#ffd83d;">0</strong></p>
         <div class="shop-items">
-          <button class="shop-btn" id="buySkinBtn">購買：藍色光芒 (3 金幣)</button>
+          <button class="shop-btn" id="buySkinBtn">購買：光芒環繞 (3 金幣)</button>
           <button class="shop-btn" id="buyShieldBtn">購買：一次性防護罩 (2 金幣)</button>
           <button class="shop-btn" id="buyHintBtn">購買：提示卡 (2 金幣)</button>
           <button class="shop-btn" id="buyMealBtn">購買：高蛋白水煮餐，恢復 1 點生命 (2 金幣)</button>
@@ -372,7 +372,7 @@
       { question: '第 15 題：正確的洗手步驟中，搓揉雙手的時間建議至少維持多久？', correct: 1, options: ['5 秒', '20 秒', '1 分鐘', '隨便沖水就好'], explain: '確實搓洗雙手至少 20 秒（內外夾弓大立腕），才能有效去除手部病菌。' },
       { question: '第 16 題：身體要自然合成「維生素D」，最簡單且有效的方法是？', correct: 2, options: ['每天喝手搖飲', '待在冷氣房', '適度曬太陽', '熬夜'], explain: '人體皮膚在適度接受日照後，能自行合成維生素D，有助於骨骼與免疫健康。' },
       { question: '第 17 題：根據「20-20-20」護眼法則，用眼每 20 分鐘應該要？', correct: 1, options: ['閉眼 20 分鐘', '看 20呎外 20秒', '滴20滴眼藥水', '看螢幕 20 秒'], explain: '每用眼 20 分鐘，應眺望 20 呎（約 6 公尺）外遠方至少 20 秒來放鬆睫狀肌。' },
-      { question: '第 18 題：關於日常減糖，下列哪一個觀念比較正確？', correct: 3, options: ['水果糖分可無限吃', '蜂蜜不是糖可多喝', '果汁等同新鮮水果', '喝無糖茶或白開水'], explain: '減少額外添加糖的攝取，以無糖飲品或白開水取代含糖飲料最健康。' },
+      { question: '第 18 題：關於日常減糖，下列哪一個觀念比較正確？', correct: 3, options: ['水果不限', '蜂蜜非糖', '果汁等水果', '喝無糖茶'], explain: '減少額外添加糖的攝取，以無糖飲品或白開水取代含糖飲料最健康。' },
       { question: '第 19 題：維持良好的口腔健康，每天至少應該刷幾次牙？', correct: 0, options: ['2 次', '不用刷', '一週 1 次', '只有早上刷'], explain: '每天至少應在早晨與睡前刷牙各一次，並建議搭配使用牙線。' },
       { question: '第 20 題：吃油炸食物容易攝取過多熱量，哪種烹調方式較健康？', correct: 1, options: ['紅燒', '清蒸或水煮', '勾芡', '糖醋'], explain: '清蒸或水煮能保留食物原味，且不需要額外添加大量油脂。' }
     ];
@@ -858,15 +858,15 @@
 
     function updateShopUI() {
       shopCoinsDisplay.textContent = gameCoins;
-      // 判斷藍色光芒按鈕狀態
+      // 判斷光芒環繞按鈕狀態
       if (equippedSkin === '#24869a') {
-        buySkinBtn.textContent = '已裝備：藍色光芒';
+        buySkinBtn.textContent = '已裝備：光芒環繞';
         buySkinBtn.disabled = true;
       } else if (gameCoins < 3) {
         buySkinBtn.textContent = '金幣不足 (需 3 金幣)';
         buySkinBtn.disabled = true;
       } else {
-        buySkinBtn.textContent = '購買：藍色光芒 (3 金幣)';
+        buySkinBtn.textContent = '購買：光芒環繞 (3 金幣)';
         buySkinBtn.disabled = false;
       }
 
@@ -1491,10 +1491,34 @@
       ctx.translate(centerX, bottomY);
       if (player.face === -1) ctx.scale(-1, 1);
 
-      // 藍色光芒：購買後在角色周圍顯示藍色光暈效果
+      // 光芒環繞：購買後在角色周圍顯示三個光點環繞動畫
       if (equippedSkin === '#24869a') {
-        ctx.shadowColor = 'rgba(63, 198, 255, 0.95)';
-        ctx.shadowBlur = 16;
+        const t = Date.now() / 420;
+        const orbitRadiusX = Math.max(drawW * 0.62, 28);
+        const orbitRadiusY = Math.max(drawH * 0.34, 20);
+
+        for (let i = 0; i < 3; i++) {
+          const angle = t + i * (Math.PI * 2 / 3);
+          const px = Math.cos(angle) * orbitRadiusX;
+          const py = -drawH * 0.48 + Math.sin(angle) * orbitRadiusY + bob;
+          const glowSize = 4 + Math.sin(t * 1.4 + i) * 1.2;
+
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.shadowColor = 'rgba(255, 232, 90, 0.95)';
+          ctx.shadowBlur = 16;
+          ctx.fillStyle = 'rgba(255, 225, 70, 0.95)';
+          ctx.beginPath();
+          ctx.arc(px, py, glowSize, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.shadowBlur = 8;
+          ctx.fillStyle = 'rgba(255, 255, 190, 0.9)';
+          ctx.beginPath();
+          ctx.arc(px - 1.2, py - 1.2, Math.max(glowSize * 0.42, 1.5), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       }
 
       if (img && img.complete) {
