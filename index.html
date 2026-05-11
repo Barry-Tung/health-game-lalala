@@ -752,10 +752,10 @@
       hazardSpawnTimer--;
       if (hazardSpawnTimer <= 0) {
         hazards.push({
-          x: Math.random() * (W - 40),
-          y: -50,
-          w: 45,
-          h: 45,
+          x: Math.random() * (W - 90),
+          y: -100,
+          w: 90,
+          h: 90,
           vy: 2 + Math.random() * 3,
           type: HAZARD_TYPES[Math.floor(Math.random() * HAZARD_TYPES.length)]
         });
@@ -1341,11 +1341,11 @@
         ctx.shadowColor = 'rgba(255, 40, 40, 0.65)';
         ctx.shadowBlur = 14;
       }
-      ctx.fillStyle = '#5bc92f';
+      ctx.fillStyle = '#0f3d1e';
       ctx.fillRect(drawX, drawY, box.w, box.h);
-      ctx.fillStyle = shakeFrames > 0 ? '#7df047' : '#83ee4b';
+      ctx.fillStyle = shakeFrames > 0 ? '#1f6b32' : '#18562a';
       ctx.fillRect(drawX + 5, drawY + 5, box.w - 10, box.h - 10);
-      ctx.strokeStyle = shakeFrames > 0 ? '#d62828' : '#2e7019';
+      ctx.strokeStyle = shakeFrames > 0 ? '#d62828' : '#0a2814';
       ctx.lineWidth = 4;
       ctx.strokeRect(drawX, drawY, box.w, box.h);
       ctx.fillStyle = 'rgba(255,255,255,0.25)';
@@ -1441,7 +1441,7 @@
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        ctx.font = '30px Arial';
+        ctx.font = '60px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(h.type.emoji, h.x + h.w/2, h.y + h.h/2 + 3);
@@ -1584,9 +1584,17 @@
       ctx.font = 'bold 40px "Microsoft JhengHei"';
       ctx.fillText(finished ? '遊戲結束' : '跳跳跳健康問答', W / 2, 330);
       ctx.font = '24px "Microsoft JhengHei"';
-      ctx.fillText(finished ? `最終分數：${score}` : '碰撞正確答案，消除箱子並跳上下一層', W / 2, 378);
-      ctx.fillText(finished ? `總花費時間：${formatTime(finalElapsedTime)}` : '按上方「開始遊戲」開始', W / 2, 420);
-      if (finished) ctx.fillText('按重新開始可再次挑戰', W / 2, 455);
+
+      if (finished) {
+        ctx.fillText(`最終分數：${score}`, W / 2, 378);
+        ctx.fillText(`總花費時間：${formatTime(finalElapsedTime)}`, W / 2, 420);
+        ctx.fillText('按重新開始可再次挑戰', W / 2, 455);
+      } else {
+        ctx.fillText('碰撞正確答案，消除箱子並跳上下一層', W / 2, 372);
+        ctx.fillText('上方會有垃圾食物掉落，請小心閃避', W / 2, 408);
+        ctx.fillText('答對可獲得金幣，還能在商店購買道具', W / 2, 444);
+        ctx.fillText('按上方「開始遊戲」開始', W / 2, 478);
+      }
       ctx.restore();
     }
 
